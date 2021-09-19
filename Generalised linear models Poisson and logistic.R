@@ -14,7 +14,7 @@ library(jtools)
 
 Data <- NHSRdatasets::LOS_model
 
-ggplot(Data, aes(Age, LOS, color)) + geom_point()
+ggplot(Data, aes(Age, LOS, color = Organisation)) + geom_point()
 
 ##Checking distribution of the LOS variable
 qqnorm(Data$LOS) ##Not normal
