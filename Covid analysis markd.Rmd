@@ -1,0 +1,241 @@
+---
+title: "Covid cases"
+---
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(scales)
+library(directlabels)
+library(viridis)
+library(countrycode)
+library(zoo)
+
+setwd("##Paste in Directory")
+```
+
+
+```{r}
+Data <- read.csv("covid-variants.csv")
+
+head(Data)
+Data$Country <- as.character(Data$location)
+Data$Date <- as.Date(Data$date)
+Data$variant <- as.character(Data$variant)
+Data$num_sequences <-as.numeric(Data$num_sequences)
+Data$perc_sequences <- as.numeric(Data$perc_sequences)
+Data$num_sequences_total <- as.numeric(Data$num_sequences_total)
+
+sum(is.na(Data$Country)) #0
+as.data.frame(table(Data$Country))
+
+sum(is.na(Data$Date)) #0
+
+sum(is.na(Data$variant)) #0
+
+sum(is.na(Data$num_sequences)) #0
+
+sum(is.na(Data$perc_sequences)) #0
+
+sum(is.na(Data$num_sequences_total))#0
+
+#The full Dataset contains data for the total number of covid cases, as well as specific numbers for many 
+#separate variants. For this visualisation I am only interested in the total Covid figure and the specific #Omicron Figure. 
+New_Data <- Data[Data$variant == "Omicron", ]#New dataframe only contains Data of Omicron variant
+
+# The Dates in the Dataset are in the form DD-MM-YYYY, however some countries record data at different intervals and on different days making it difficult to visualize neatly across Countries. I am going to add a new Column to the Dataset that contains the Dates in MM-YYYY.
+
+New_Data$month <- as.yearmon(New_Data$Date, "%Y %m")
+New_Data$month <- as.Date(New_Data$month)
+class(New_Data$month)
+```
+
+```{r}
+ggplot(New_Data, aes(x = month, y = num_sequences_total)) +
+  geom_col(fill = "red") +
+  theme(legend.position = 'none') +
+  scale_x_date("Date",
+               date_breaks = "3 month",
+              labels=date_format("%b-%Y")) +
+  scale_y_continuous("Total Covid Cases Worldwide")
+
+```
+
+General Covid cases in every country
+```{r}
+ggplot(New_Data, aes(x = Date, y = num_sequences_total,
+                         color = Country)) +
+  geom_line() +
+  geom_dl(aes(label = Country),
+          method = list("top.bumpup",cex = 0.3),
+          color = "black") + 
+  theme(legend.position = 'none') +
+  scale_x_date("Date",
+               date_breaks = "3 month",
+               labels=date_format("%b-%Y")) +
+  scale_y_continuous("Covid Cases")
+  
+```
+
+Omicron cases
+```{r}
+ggplot(New_Data, aes(x = Date, y = num_sequences,
+                         color = Country)) +
+  geom_line() + 
+  geom_dl(aes(label = Country), method = list(dl.trans(x = x + 0.5), "top.points",
+                                              cex = 0.4, hjust=1),
+          color = "black") +
+  scale_y_log10("Omicron Cases") + theme(legend.position = 'none')+
+  scale_x_date("Date", date_breaks = "1 month",
+               labels=date_format("%b-%Y"),
+               limits = as.Date(c("2021-10-01", "2021-12-30")))
+```
+
+```{r}
+##Split the data up into high case rate countries and low case rate countries
+
+unique(New_Data$Country) #121 countries on list
+
+
+New_Data_sum <- New_Data %>% group_by(Country) %>% summarise(month, Date,
+                                                             num_sequences_total,
+                                                             num_sequences,
+                                                         Total_Omicron = sum(num_sequences),
+                                                          Total_Cov = sum(num_sequences_total,
+                                                                                       na.rm=TRUE))
+
+Ordered_by_Cov_Cases <- New_Data_sum[order(New_Data_sum$Total_Cov, decreasing = TRUE), ]
+Ordered_by_Cases_Countrylist <- unique(Ordered_by_Cov_Cases$Country)
+Ordered_by_Cases_Countrylist
+
+Top_10 <- c(Ordered_by_Cases_Countrylist[1:10])
+
+'%!in%' <- Negate('%in%')
+Top10Cov <- New_Data[New_Data_sum$Country %in% Top_10, ]
+NotTop10Cov <- New_Data[New_Data_sum$Country %!in% Top_10, ]
+```
+
+Plot the Covid cases for the top 10 list
+```{r}
+
+ggplot(Top10Cov, aes(Date, num_sequences_total, group = Country, color = Country)) +
+  geom_line() +
+  geom_dl(aes(label = Country),
+          method = list("top.bumpup", cex = 0.5),
+          color = "black") +
+  theme(legend.position = "none") +
+  scale_x_date("Date", date_breaks = "3 month",
+               labels=date_format("%b-%Y")) +
+  scale_y_continuous("Covid Cases") +
+  ggtitle("Covid cases in the 10 highest countries")
+
+```
+
+```{r}
+ggplot(Top10Cov, aes(Date, num_sequences, group = Country, color = Country)) +
+  geom_line() +
+  geom_dl(aes(label = Country),
+          method = list("top.bumpup", cex = 0.5),
+          color = "black") +
+  scale_x_date("Date", date_breaks = "1 month",
+               labels=date_format("%b-%Y"),
+               limits = as.Date(c("2021-10-01", "2022-01-01")))+
+  scale_y_log10("Omicron Cases log10") +
+  theme(legend.position = "none") +
+  ggtitle("Omicron cases in the 10 highest countries")
+```
+
+
+```{r}
+world_map<-map_data("world")
+
+#using the countrycodes package to convert the written english country names to a standard format
+New_Data$countrycodes <- countrycode(New_Data$Country,
+                                         origin = 'country.name', destination = 'genc3c')
+
+world_map$countrycodes <- countrycode(world_map$region,
+                                       origin = 'country.name', destination = 'genc3c')
+
+Total_Cov_Data <- New_Data %>% group_by(countrycodes) %>% summarise( month,
+    Total_Covid_Cases = sum(num_sequences_total, na.rm=TRUE),
+    Total_Omicron_Cases = sum(num_sequences, na.rm =TRUE))
+
+#Making the new dataframe with geospatial coordinates
+map_data <- merge(Total_Cov_Data, world_map, by = 'countrycodes', all = TRUE)
+map_data <- map_data[order(map_data$order), ]
+
+map_data <- map_data %>% filter(!is.na(map_data$long))
+
+#Creating a map displaying the total Covid cases in each country
+ggplot(map_data, aes(x = long, y = lat, group = group, fill = log10(Total_Covid_Cases) )) +
+  geom_polygon()  +
+  coord_quickmap() +
+  scale_fill_gradient(name = "Covid19 cases", low = "white", high = "red") +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        rect = element_blank()) +
+  ggtitle("World map of total covid 19 cases")
+```
+
+```{r}
+#Creating a map displaying the total Covid cases in each country
+ggplot(map_data, aes(x = long, y = lat, group = group, fill = log10(Total_Omicron_Cases) )) +
+  geom_polygon()  +
+  coord_quickmap() +
+  scale_fill_gradient(name = "Omicron cases", low = "white", high = "red") +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        rect = element_blank()) +
+  ggtitle("World map of total Omicron cases")
+```
+
+
+Create a map  for each month
+```{r}
+
+#Date_Total_Cov <- New_Data %>% group_by(month) %>% summarise(countrycodes,
+                                                                #Date_Covid_Cases = sum(num_sequences_total,
+                                                                  #                     na.rm=TRUE))
+
+#map_data_date <- merge(Date_Total_Cov, world_map, by = 'countrycodes', all = TRUE)
+#map_data_date <- map_data_date[order(map_data_date$order), ]
+
+list_data_date <- map_data %>% split(.$month)
+
+world_map2 <- world_map %>% summarise(
+  long,
+  lat,
+  order,
+  countrycodes
+)
+
+memory.limit(45000)
+lapply(list_data_date, function(x){
+  merge(x, world_map2, by = 'countrycodes', all = TRUE)
+  }) 
+
+lapply(list_data_date, function(x){ggplot(x, aes(x = long, y = lat, group = group, fill = log10(Total_Covid_Cases)))+
+  geom_polygon()  +
+  coord_quickmap() +
+  scale_fill_gradient(name = "Covid19 cases log", low = "white", high = "red") +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        rect = element_blank()) +
+    facet_wrap(~month)}) 
+
+```
+
+
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
