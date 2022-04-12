@@ -11,8 +11,6 @@ library(directlabels)
 library(viridis)
 library(countrycode)
 library(zoo)
-
-setwd("##Paste in Directory")
 ```
 
 
