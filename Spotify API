@@ -1,0 +1,93 @@
+library(httr)
+library(jsonlite)
+library(lubridate)
+library(curl)
+library(dplyr)
+library(devtools)
+library(spotifyr)
+library(knitr)
+library(ggjoy)
+library(ggplot2)
+
+options(stringsAsFactors = FALSE)
+
+Sys.setenv(SPOTIFY_CLIENT_ID = '')
+Sys.setenv(SPOTIFY_CLIENT_SECRET = '')
+
+access_token <- get_spotify_access_token()
+
+beatles <- get_artist_audio_features("the beatels")
+
+library(knitr)
+beatles %>% count(key_mode, sort = TRUE) %>% head(30) %>% kable()
+
+Joy_division <- get_artist_audio_features('joy division')
+
+Joy_division %>%
+  arrange(-valence) %>%
+  select(track_name, valence) %>%
+  head(2) %>% kable()
+
+ggplot(Joy_division, aes(x = valence, y = album_name)) +
+  geom_joy() +
+  theme_joy()
+
+#Using a density plot
+
+ggplot(Joy_division, aes(x = valence, y = album_name)) +
+  geom_density_ridges()
+
+
+lamar <- get_artist_audio_features('Kendrick Lamar')
+
+lamar %>% group_by(album_name) %>%
+  filter(!album_name %in% c('DAMN. COLLECTORS EDITION', 'untitled unmastered',
+                            'Overly Dedicated', 'Black Panther The Album Music From And Inspired By')) %>%
+  ggplot(aes(x = valence, y = album_name, fill = ..x..)) +
+  geom_density_ridges_gradient() +
+  xlim(0, 1) +
+  theme(legend.position = "none")
+
+##Combining with lyrics
+install.packages('genius')
+library(genius)
+
+damn <- genius_album(artist = "Kendrick Lamar", album = "DAMN", info = 'all') 
+
+library(tidytext)
+library(textdata)
+
+damn %>%
+  unnest_tokens(word, lyric) %>%
+  anti_join(stop_words) %>%
+  inner_join(get_sentiments('bing')) -> damn_words
+
+
+response <- POST(
+  "https://accounts.spotify.com/api/token",
+  config = authenticate(user = clientID, 
+                        password = secretID),
+  body = list(grant_type = "client_credentials"), 
+  encode = "form"
+)
+
+token <- content(response)
+bearer.token <- paste(token$token_type, token$access_token)
+
+url <- paste0("https://developer.spotify.com/ pc?apikey = " , "response")
+my_raw_result <- httr::GET(url)
+str(my_raw_result$content)
+my_content <- httr::content(my_raw_result, as = "text")
+
+path <- '/discover/#metadata'
+
+raw.result <- GET(url = url, path = path)
+names(raw.result)
+raw.result$status_code
+head(raw.result$content)
+
+this.raw.char <- rawToChar(response$content)
+nchar(this.raw.char)
+substr(this.raw.char, 1, 100)
+
+this.content <- fromJSON(this.raw.char)
